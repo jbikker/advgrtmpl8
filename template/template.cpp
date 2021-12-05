@@ -1264,7 +1264,18 @@ void Surface::LoadImage( const char* file )
 	{
 		buffer = (uint*)MALLOC64( width * height * sizeof( uint ) );
 		const int s = width * height;
-		for (int i = 0; i < s; i++) buffer[i] = (data[i * n + 0] << 16) + (data[i * n + 1] << 8) + data[i * n + 2];
+		if (n == 1) // greyscale
+		{
+			for (int i = 0; i < s; i++)
+			{
+				const unsigned char p = data[i];
+				buffer[i] = p + (p << 8) + (p << 16);
+			}
+		}
+		else
+		{
+			for (int i = 0; i < s; i++) buffer[i] = (data[i * n + 0] << 16) + (data[i * n + 1] << 8) + data[i * n + 2];
+		}
 	}
 	stbi_image_free( data );
 }

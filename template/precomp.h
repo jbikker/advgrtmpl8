@@ -84,9 +84,12 @@ public:
 	void SetChar( int c, const char* c1, const char* c2, const char* c3, const char* c4, const char* c5 );
 	void Print( const char* t, int x1, int y1, uint c );
 	void Clear( uint c );
+	void Line( float x1, float y1, float x2, float y2, uint c );
 	void Plot( int x, int y, uint c );
 	void LoadImage( const char* file );
 	void CopyTo( Surface* dst, int a_X, int a_Y );
+	void Box( int x1, int y1, int x2, int y2, uint color );
+	void Bar( int x1, int y1, int x2, int y2, uint color );
 	// attributes
 	uint* buffer = 0;
 	int width = 0, height = 0;
@@ -616,9 +619,9 @@ inline float length( const int2& v ) { return sqrtf( (float)dot( v, v ) ); }
 inline float length( const int3& v ) { return sqrtf( (float)dot( v, v ) ); }
 inline float length( const int4& v ) { return sqrtf( (float)dot( v, v ) ); }
 
-inline float2 normalize( const float2& v ) { float invLen = rsqrtf( dot( v, v ) );	return v * invLen; }
-inline float3 normalize( const float3& v ) { float invLen = rsqrtf( dot( v, v ) );	return v * invLen; }
-inline float4 normalize( const float4& v ) { float invLen = rsqrtf( dot( v, v ) );	return v * invLen; }
+inline float2 normalize( const float2& v ) { float invLen = rsqrtf( dot( v, v ) ); return v * invLen; }
+inline float3 normalize( const float3& v ) { float invLen = rsqrtf( dot( v, v ) ); return v * invLen; }
+inline float4 normalize( const float4& v ) { float invLen = rsqrtf( dot( v, v ) ); return v * invLen; }
 
 inline uint dominantAxis( const float2& v ) { float x = fabs( v.x ), y = fabs( v.y ); return x > y ? 0 : 1; } // for coherent grid traversal
 inline uint dominantAxis( const float3& v ) { float x = fabs( v.x ), y = fabs( v.y ), z = fabs( v.z ); float m = max( max( x, y ), z ); return m == x ? 0 : (m == y ? 1 : 2); }
