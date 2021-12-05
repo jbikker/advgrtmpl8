@@ -21,7 +21,7 @@ void MyApp::Tick( float deltaTime )
 	// print something to the console window
 	printf( "hello world!\n" );
 	// plot some colors
-	for( int red = 0; red < 256; red++ ) for( int green = 0; green < 256; green++ )
+	for (int red = 0; red < 256; red++) for (int green = 0; green < 256; green++)
 	{
 		int x = red, y = green;
 		screen->Plot( x + 200, y + 100, (red << 16) + (green << 8) );
