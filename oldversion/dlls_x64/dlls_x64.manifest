@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+    <assemblyIdentity
+                            type="x64"
+                            name="dlls_x64"
+                            version="1.0.0.0"
+            />
+    <file name="FreeImage.dll"/>
+	<file name="glew32.dll"/>
+	<file name="SDL2.dll"/>
+	<file name="ucrtbased.dll"/>
+</assembly>
