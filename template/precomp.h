@@ -41,6 +41,7 @@ using namespace std;
 #include <windows.h>
 
 // OpenCL headers
+#define CL_USE_DEPRECATED_OPENCL_2_0_APIS // safe; see https://stackoverflow.com/a/28500846
 #include "cl/cl.h"
 #include <cl/cl_gl_ext.h>
 

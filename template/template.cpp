@@ -1123,14 +1123,8 @@ Kernel::Kernel( char* file, char* entryPoint )
 		// repeat until no #includes left
 		csText = tmp;
 	}
-	// store expanded file
-	const char* source = csText.c_str();
-#if 0
-	FILE* f = fopen( "expanded.txt", "wb" );
-	fwrite( source, 1, strlen( source ) + 1, f );
-	fclose( f );
-#endif
 	// attempt to compile the loaded and expanded source text
+	const char* source = csText.c_str();
 	size_t size = strlen( source );
 	cl_int error;
 	program = clCreateProgramWithSource( context, 1, (const char**)&source, &size, &error );

@@ -34,6 +34,7 @@ void MyApp::Tick( float deltaTime )
 	static Kernel* kernel = 0;			// statics should be members of MyApp of course.
 	static Surface bitmap( 512, 512 );	// having them here allows us to disable the OpenCL
 	static Buffer* clBuffer = 0;		// demonstration using a single #if 0.
+	static int offset = 0;
 	if (!kernel)
 	{
 		// prepare for OpenCL work
@@ -45,6 +46,7 @@ void MyApp::Tick( float deltaTime )
 	}
 	// pass arguments to the OpenCL kernel
 	kernel->SetArgument( 0, clBuffer );
+	kernel->SetArgument( 1, offset++ );
 	// run the kernel; use 512 * 512 threads
 	kernel->Run( 512 * 512 );
 	// get the results back from GPU to CPU (and thus: into bitmap.pixels)
