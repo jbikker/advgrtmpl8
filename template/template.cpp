@@ -17,7 +17,7 @@ using namespace Tmpl8;
 // Note: this does cause the linker to produce a .lib and .exp file;
 // see http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/OptimusRenderingPolicies.pdf
 #ifdef WIN32
-/* extern "C"
+extern "C"
 {
 	__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
@@ -25,7 +25,7 @@ using namespace Tmpl8;
 extern "C"
 {
 	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-} */
+}
 #endif
 
 static GLFWwindow* window = 0;
@@ -84,7 +84,7 @@ void main()
 	glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 	glfwWindowHint( GLFW_STENCIL_BITS, GL_FALSE );
 	glfwWindowHint( GLFW_RESIZABLE, GL_FALSE /* easier :) */ );
-	if (!(window = glfwCreateWindow( SCRWIDTH, SCRHEIGHT, "ADVGR Tmpl8", 0, 0 ))) FatalError( "glfwCreateWindow failed." );
+	if (!(window = glfwCreateWindow( SCRWIDTH, SCRHEIGHT, "Tmpl8-2022", 0, 0 ))) FatalError( "glfwCreateWindow failed." );
 	glfwMakeContextCurrent( window );
 	// register callbacks
 	glfwSetWindowSizeCallback( window, ReshapeWindowCallback );
@@ -122,9 +122,131 @@ void main()
 	app->screen = screen;
 	app->Init();
 	// done, enter main loop
+#if 1
+	// basic shader: apply gamma correction
 	Shader* shader = new Shader(
 		"#version 330\nin vec4 p;\nin vec2 t;out vec2 u;void main(){u=t;gl_Position=p;}",
 		"#version 330\nuniform sampler2D c;in vec2 u;out vec4 f;void main(){f=sqrt(texture(c,u));}", true );
+#else
+	// fxaa shader
+	Shader* shader = new Shader(
+		"#version 330\nin vec4 p;\nin vec2 t;out vec2 uv;void main(){uv=t;gl_Position=p;}",
+		// FXAA 3.11 Implementation - effendiian
+		// https://www.shadertoy.com/view/ttXGzn
+		"#version 330\nuniform sampler2D tex;\nin vec2 uv;out vec4 f; \n"							\
+		"#define FXAA_LUMINANCE 			1					\n"									\
+		"#define FXAA_EDGE_THRESHOLD	  	(1.0/8.0)			\n"									\
+		"#define FXAA_EDGE_THRESHOLD_MIN  	(1.0/24.0)			\n"									\
+		"#define FXAA_SEARCH_STEPS			32					\n"									\
+		"#define FXAA_SEARCH_ACCELERATION 	1					\n"									\
+		"#define FXAA_SEARCH_THRESHOLD		(1.0/4.0)			\n"									\
+		"#define FXAA_SUBPIX				2 // 1 is crisper	\n"									\
+		"#define FXAA_SUBPIX_CAP			(3.0/4.0)			\n"									\
+		"#define FXAA_SUBPIX_TRIM			(1.0/4.0)			\n"									\
+		"#define FXAA_SUBPIX_TRIM_SCALE (1.0/(1.0 - FXAA_SUBPIX_TRIM))	\n"							\
+		"float lum( vec3 color ) {\n #if FXAA_LUMINANCE == 0 \n"									\
+		"	return color.x * 0.2126729 + color.y * 0.7151522 + color.z * 0.0721750; \n"				\
+		"#else \n return color.g * (0.587 / 0.299) + color.r; \n #endif \n }"						\
+		"float vertEdge( float lumaO, float lumaN, float lumaE, float lumaS,"						\
+		"	float lumaW, float lumaNW, float lumaNE, float lumaSW, float lumaSE )"					\
+		"{	float top = (0.25 * lumaNW) + (-0.5 * lumaN) + (0.25 * lumaNE);"						\
+		"	float middle = (0.50 * lumaW) + (-1.0 * lumaO) + (0.50 * lumaE);"						\
+		"	float bottom = (0.25 * lumaSW) + (-0.5 * lumaS) + (0.25 * lumaSE);"						\
+		"	return abs( top ) + abs( middle ) + abs( bottom ); }"									\
+		"float horEdge( float lumaO, float lumaN, float lumaE, float lumaS,"						\
+		"	float lumaW, float lumaNW, float lumaNE, float lumaSW, float lumaSE )"					\
+		"{	float top = (0.25 * lumaNW) + (-0.5 * lumaW) + (0.25 * lumaSW);"						\
+		"	float middle = (0.50 * lumaN) + (-1.0 * lumaO) + (0.50 * lumaS);"						\
+		"	float bottom = (0.25 * lumaNE) + (-0.5 * lumaE) + (0.25 * lumaSE);"						\
+		"	return abs( top ) + abs( middle ) + abs( bottom ); }"									\
+		"vec3 fxaa( vec2 textureDimensions, vec2 uv )"												\
+		"{	vec2 texel = vec2( 1.0, 1.0 ) / textureDimensions;"										\
+		"	vec3 rgbN = texture( tex, uv + vec2( 0, -texel.y ) ).rgb,"								\
+		"		 rgbW = texture( tex, uv + vec2( -texel.x, 0 ) ).rgb,"								\
+		"		 rgbO = texture( tex, uv + vec2( 0, 0 ) ).rgb,"										\
+		"		 rgbE = texture( tex, uv + vec2( texel.x, 0 ) ).rgb,"								\
+		"		 rgbS = texture( tex, uv + vec2( 0, texel.y ) ).rgb;"								\
+		"	float lumaN = lum( rgbN ), lumaW = lum( rgbW );"										\
+		"	float lumaO = lum( rgbO ), lumaE = lum( rgbE ), lumaS = lum( rgbS );"					\
+		"	float minLuma = min( lumaO, min( min( lumaN, lumaW ), min( lumaS, lumaE ) ) );"			\
+		"	float maxLuma = max( lumaO, max( max( lumaN, lumaW ), max( lumaS, lumaE ) ) );"			\
+		"	float localContrast = maxLuma - minLuma;"												\
+		"	if (localContrast < max( FXAA_EDGE_THRESHOLD_MIN, maxLuma* FXAA_EDGE_THRESHOLD ))"		\
+		"		return rgbO;"																		\
+		"	vec3 rgbL = rgbN + rgbW + rgbO + rgbE + rgbS;"											\
+		"	float lumaL = (lumaN + lumaW + lumaS + lumaE) * 0.25;"									\
+		"	float pixelContrast = abs( lumaL - lumaO );"											\
+		"	float contrastRatio = pixelContrast / localContrast;"									\
+		"	float lowpassBlend = 0;			\n"														\
+		"#if FXAA_SUBPIX == 1				\n"														\
+		"	lowpassBlend = max( 0.0, contrastRatio - FXAA_SUBPIX_TRIM ) * FXAA_SUBPIX_TRIM_SCALE;"	\
+		"	lowpassBlend = min( FXAA_SUBPIX_CAP, lowpassBlend );	\n"								\
+		"#elif FXAA_SUBPIX == 2				\n"														\
+		"	lowpassBlend = contrastRatio;	\n"														\
+		"#endif								\n"														\
+		"	vec3 rgbNW = texture( tex, uv + vec2( -texel.x, -texel.y ) ).rgb,"						\
+		"		 rgbNE = texture( tex, uv + vec2( texel.x, -texel.y ) ).rgb,"						\
+		"		 rgbSW = texture( tex, uv + vec2( -texel.x, texel.y ) ).rgb,"						\
+		"		 rgbSE = texture( tex, uv + vec2( texel.x, texel.y ) ).rgb;"						\
+		"	rgbL += (rgbNW + rgbNE + rgbSW + rgbSE);"												\
+		"	rgbL *= (1.0 / 9.0);"																	\
+		"	float lumaNW = lum( rgbNW ), lumaNE = lum( rgbNE );"									\
+		"	float lumaSW = lum( rgbSW ), lumaSE = lum( rgbSE );"									\
+		"	float edgeVert = vertEdge( lumaO, lumaN, lumaE, lumaS, lumaW, lumaNW, lumaNE, lumaSW, lumaSE );" \
+		"	float edgeHori = horEdge( lumaO, lumaN, lumaE, lumaS, lumaW, lumaNW, lumaNE, lumaSW, lumaSE );" \
+		"	bool isHorizontal = edgeHori >= edgeVert;"												\
+		"	float edgeSign = isHorizontal ? -texel.y : -texel.x;"									\
+		"	float gradNeg = isHorizontal ? abs( lumaN - lumaO ) : abs( lumaW - lumaO );"			\
+		"	float gradPos = isHorizontal ? abs( lumaS - lumaO ) : abs( lumaE - lumaO );"			\
+		"	float lumaNeg = isHorizontal ? ((lumaN + lumaO) * 0.5) : ((lumaW + lumaO) * 0.5);"		\
+		"	float lumaPos = isHorizontal ? ((lumaS + lumaO) * 0.5) : ((lumaE + lumaO) * 0.5);"		\
+		"	bool isNegative = (gradNeg >= gradPos);"												\
+		"	float gradientHighest = isNegative ? gradNeg : gradPos;"								\
+		"	float lumaHighest = isNegative ? lumaNeg : lumaPos;"									\
+		"	if (isNegative) edgeSign *= -1.0;"														\
+		"	vec2 pointN = vec2( 0.0, 0.0 );"														\
+		"	pointN.x = uv.x + (isHorizontal ? 0.0 : edgeSign * 0.5);"								\
+		"	pointN.y = uv.y + (isHorizontal ? edgeSign * 0.5 : 0.0);"								\
+		"	gradientHighest *= FXAA_SEARCH_THRESHOLD;"												\
+		"	vec2 pointP = pointN;"																	\
+		"	vec2 offset = isHorizontal ? vec2( texel.x, 0.0 ) : vec2( 0.0, texel.y );"				\
+		"	float lumaNegEnd = lumaNeg, lumaPosEnd = lumaPos;"										\
+		"	bool searchNeg = false, searchPos = false;\n"											\
+		"#if FXAA_SEARCH_ACCELERATION == 1\n"														\
+		"	pointN -= offset, pointP += offset;\n"													\
+		"#elif FXAA_SEARCH_ACCELERATION == 2\n"														\
+		"	pointN -= offset * 1.5, pointP += offset * 1.5, offset *= 2;\n"							\
+		"#elif FXAA_SEARCH_ACCELERATION == 3\n"														\
+		"	pointN -= offset * 2, pointP += offset * 2, offset *= 3;\n"								\
+		"#elif FXAA_SEARCH_ACCELERATION == 4\n"														\
+		"	pointN -= offset * 2.5, pointP += offset * 2.5, offset *= 4;\n"							\
+		"#endif\n"																					\
+		"	for (int i = 0; i < FXAA_SEARCH_STEPS; i++) {\n"										\
+		"	#if FXAA_SEARCH_ACCELERATION == 1\n"													\
+		"		if (!searchNeg) lumaNegEnd = lum( texture( tex, pointN ).rgb );"					\
+		"		if (!searchPos) lumaPosEnd = lum( texture( tex, pointP ).rgb );\n"					\
+		"	#else \n"																				\
+		"		if (!searchNeg) lumaNegEnd = lum( textureGrad( tex, pointN, offset, offset ).rgb );"	\
+		"		if (!searchPos) lumaPosEnd = lum( textureGrad( tex, pointP, offset, offset ).rgb );\n"	\
+		"	#endif \n"																				\
+		"		searchNeg = searchNeg || (abs( lumaNegEnd - lumaHighest ) >= gradientHighest);"		\
+		"		searchPos = searchPos || (abs( lumaPosEnd - lumaPos ) >= gradPos);"					\
+		"		if (searchNeg && searchPos) break;"													\
+		"		if (!searchNeg) pointN -= offset;"													\
+		"		if (!searchPos) pointP += offset; }"												\
+		"	float distanceNeg = isHorizontal ? uv.x - pointN.x : uv.y - pointN.y;"					\
+		"	float distancePos = isHorizontal ? pointP.x - uv.x : pointP.y - uv.y;"					\
+		"	bool isCloserToNegative = distanceNeg < distancePos;"									\
+		"	float lumaEnd = isCloserToNegative ? lumaNegEnd : lumaPosEnd;"							\
+		"	if (((lumaO - lumaNeg) < 0.0) == ((lumaEnd - lumaNeg) < 0.0)) edgeSign = 0.0;"			\
+		"	float spanLen = distancePos + distanceNeg;"												\
+		"	float dist = isCloserToNegative ? distanceNeg : distancePos;"							\
+		"	float subOffs = (0.5 + (dist * (-1.0 / spanLen))) * edgeSign;"							\
+		"	vec3 rgbOffset = textureLod( tex, vec2( uv.x + (isHorizontal ? 0.0 :"					\
+		"		subOffs), uv.y + (isHorizontal ? subOffs : 0.0) ), 0.0 ).rgb;"						\
+		"	return mix( rgbOffset, rgbL, lowpassBlend ); }"											\
+		"void main(){f=vec4(sqrt(fxaa(vec2(1240,800),uv)),1);}", true );
+#endif
 	float deltaTime = 0;
 	static int frameNr = 0;
 	static Timer timer;
@@ -421,14 +543,14 @@ void GLTexture::Bind( const uint slot )
 void GLTexture::CopyFrom( Surface* src )
 {
 	glBindTexture( GL_TEXTURE_2D, ID );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, src->buffer );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, src->pixels );
 	CheckGL();
 }
 
 void GLTexture::CopyTo( Surface* dst )
 {
 	glBindTexture( GL_TEXTURE_2D, ID );
-	glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, dst->buffer );
+	glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, dst->pixels );
 	CheckGL();
 }
 
@@ -923,6 +1045,7 @@ void Buffer::CopyToDevice2( bool blocking, cl_event* eventToSet, const size_t s 
 void Buffer::CopyFromDevice( bool blocking )
 {
 	cl_int error;
+	if (!hostBuffer) hostBuffer = new uint[size], ownData = true;
 	CHECKCL( error = clEnqueueReadBuffer( Kernel::GetQueue(), deviceBuffer, blocking, 0, size * 4, hostBuffer, 0, 0, 0 ) );
 }
 
@@ -954,6 +1077,15 @@ Kernel::Kernel( char* file, char* entryPoint )
 	// load a cl file
 	string csText = TextFileRead( file );
 	if (csText.size() == 0) FatalError( "File %s not found", file );
+	// add vendor defines
+	vendorLines = 0;
+	if (isNVidia) csText = "#define ISNVIDIA\n" + csText, vendorLines++;
+	if (isAMD) csText = "#define ISAMD\n" + csText, vendorLines++;
+	if (isIntel) csText = "#define ISINTEL\n" + csText, vendorLines++;
+	if (isOther) csText = "#define ISOTHER\n" + csText, vendorLines++;
+	if (isAmpere) csText = "#define ISAMPERE\n" + csText, vendorLines++;
+	if (isTuring) csText = "#define ISTURING\n" + csText, vendorLines++;
+	if (isPascal) csText = "#define ISPASCAL\n" + csText, vendorLines++;
 	// expand #include directives: cl compiler doesn't support these natively
 	// warning: this simple system does not handle nested includes.
 	struct Include { int start, end; string file; } includes[64];
@@ -1002,9 +1134,31 @@ Kernel::Kernel( char* file, char* entryPoint )
 	cl_int error;
 	program = clCreateProgramWithSource( context, 1, (const char**)&source, &size, &error );
 	CHECKCL( error );
-	error = clBuildProgram( program, 0, NULL, "-cl-fast-relaxed-math -cl-mad-enable -cl-denorms-are-zero -cl-no-signed-zeros -cl-unsafe-math-optimizations", NULL, NULL );
+	// why does the nvidia compiler not support these:
+	// -cl-nv-maxrregcount=64 not faster than leaving it out (same for 128)
+	// -cl-no-subgroup-ifp ? fails on nvidia.
+	error = clBuildProgram( program, 0, NULL, "-cl-nv-verbose -cl-fast-relaxed-math -cl-mad-enable -cl-single-precision-constant", NULL, NULL );
 	// handle errors
-	if (error != CL_SUCCESS)
+	if (error == CL_SUCCESS)
+	{
+		// dump PTX via: https://forums.developer.nvidia.com/t/pre-compiling-opencl-kernels-tutorial/17089
+		// and: https://stackoverflow.com/questions/12868889/clgetprograminfo-cl-program-binary-sizes-incorrect-results
+		cl_uint devCount;
+		CHECKCL( clGetProgramInfo( program, CL_PROGRAM_NUM_DEVICES, sizeof( cl_uint ), &devCount, NULL ) );
+		size_t* size = new size_t[devCount];
+		size[0] = 0;
+		size_t received;
+		CHECKCL( clGetProgramInfo( program, CL_PROGRAM_BINARY_SIZES /* wrong data... */, devCount * sizeof( size_t ), size, &received ) );
+		char** binaries = new char* [devCount];
+		for (uint i = 0; i < devCount; i++)
+			binaries[i] = new char[size[i] + 1];
+		CHECKCL( clGetProgramInfo( program, CL_PROGRAM_BINARIES, devCount * sizeof( size_t ), binaries, NULL ) );
+		FILE* f = fopen( "buildlog.txt", "wb" );
+		for (uint i = 0; i < devCount; i++)
+			fwrite( binaries[i], 1, size[i] + 1, f );
+		fclose( f );
+	}
+	else
 	{
 		// obtain the error log from the cl compiler
 		if (!log) log = new char[256 * 1024]; // can be quite large
@@ -1037,6 +1191,7 @@ Kernel::Kernel( char* file, char* entryPoint )
 				lineNr--; // we count from 0 instead of 1
 				// adjust file and linenr based on include file data
 				string errorFile = file;
+				bool errorInInclude = false;
 				for (int i = Ninc - 1; i >= 0; i--)
 				{
 					if (lineNr > includes[i].end)
@@ -1048,9 +1203,11 @@ Kernel::Kernel( char* file, char* entryPoint )
 					{
 						errorFile = includes[i].file;
 						lineNr -= includes[i].start;
+						errorInInclude = true;
 						break;
 					}
 				}
+				if (!errorInInclude) lineNr -= vendorLines;
 				// present error message
 				char t[1024];
 				sprintf( t, "file %s, line %i, pos %i:\n%s", errorFile.c_str(), lineNr + 1, linePos, lns );
@@ -1100,11 +1257,13 @@ bool Kernel::InitCL()
 	if (!CHECKCL( error = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, 0, NULL, &devCount ) )) return false;
 	devices = new cl_device_id[devCount];
 	if (!CHECKCL( error = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, devCount, devices, NULL ) )) return false;
-	unsigned int deviceUsed = -1;
-	unsigned int endDev = devCount - 1;
+	uint deviceUsed = -1;
 	// search a capable OpenCL device
-	for (unsigned int i = 0; i <= endDev; ++i)
+	char device_string[1024], device_platform[1024];
+	for (uint i = 0; i < devCount; i++)
 	{
+		// CHECKCL( error = clGetDeviceInfo( devices[i], CL_DEVICE_NAME, 1024, &device_string, NULL ) );
+		// if (strstr( device_string, "AMD" ) == 0) continue; // I insist on AMD
 		size_t extensionSize;
 		CHECKCL( error = clGetDeviceInfo( devices[i], CL_DEVICE_EXTENSIONS, 0, NULL, &extensionSize ) );
 		if (extensionSize > 0)
@@ -1113,11 +1272,24 @@ bool Kernel::InitCL()
 			CHECKCL( error = clGetDeviceInfo( devices[i], CL_DEVICE_EXTENSIONS, extensionSize, extensions, &extensionSize ) );
 			string deviceList( extensions );
 			free( extensions );
-			size_t o = 0, s = deviceList.find( ' ', o ); // extensions string is space delimited
+			string mustHave[] = {
+				"cl_khr_gl_sharing",
+				"cl_khr_global_int32_base_atomics"
+			};
+			bool hasAll = true;
+			for (int j = 0; j < 2; j++)
+			{
+				size_t o = 0, s = deviceList.find( ' ', o );
+				bool hasFeature = false;
 			while (s != deviceList.npos)
 			{
 				string subs = deviceList.substr( o, s - o );
-				if (strcmp( "cl_khr_gl_sharing" /* device can do gl/cl interop */, subs.c_str() ) == 0)
+					if (strcmp( mustHave[j].c_str(), subs.c_str() ) == 0) hasFeature = true;
+					do { o = s + 1, s = deviceList.find( ' ', o ); } while (s == o);
+				}
+				if (!hasFeature) hasAll = false;
+			}
+			if (hasAll)
 				{
 					cl_context_properties props[] =
 					{
@@ -1135,18 +1307,88 @@ bool Kernel::InitCL()
 					}
 				}
 				if (deviceUsed > -1) break;
-				do { o = s + 1, s = deviceList.find( ' ', o ); } while (s == o);
-			}
 		}
 	}
 	if (deviceUsed == -1) FatalError( "No capable OpenCL device found." );
 	device = getFirstDevice( context );
 	if (!CHECKCL( error )) return false;
 	// print device name
-	char device_string[1024], device_platform[1024];
 	clGetDeviceInfo( devices[deviceUsed], CL_DEVICE_NAME, 1024, &device_string, NULL );
 	clGetDeviceInfo( devices[deviceUsed], CL_DEVICE_VERSION, 1024, &device_platform, NULL );
 	printf( "Device # %u, %s (%s)\n", deviceUsed, device_string, device_platform );
+	// digest device string
+	char* d = device_string;
+	for (int i = 0; i < strlen( d ); i++) if (d[i] >= 'A' && d[i] <= 'Z') d[i] -= 'A' - 'a';
+	if (strstr( d, "nvidia" ))
+	{
+		isNVidia = true;
+		if (strstr( d, "rtx" ))
+		{
+			// detect Ampere GPUs
+			if (strstr( d, "3050" ) || strstr( d, "3060" ) || strstr( d, "3070" ) || strstr( d, "3080" ) || strstr( d, "3090" )) isAmpere = true;
+			if (strstr( d, "a2000" ) || strstr( d, "a3000" ) || strstr( d, "a4000" ) || strstr( d, "a5000" ) || strstr( d, "a6000" )) isAmpere = true;
+			// detect Turing GPUs
+			if (strstr( d, "2060" ) || strstr( d, "2070" ) || strstr( d, "2080" )) isTuring = true;
+			// detect Titan RTX
+			if (strstr( d, "titan rtx" )) isTuring = true;
+			// detect Turing Quadro
+			if (strstr( d, "quadro" ))
+			{
+				if (strstr( d, "3000" ) || strstr( d, "4000" ) || strstr( d, "5000" ) || strstr( d, "6000" ) || strstr( d, "8000" )) isTuring = true;
+			}
+		}
+		else if (strstr( d, "gtx" ))
+		{
+			// detect Turing GPUs
+			if (strstr( d, "1650" ) || strstr( d, "1660" )) isTuring = true;
+			// detect Pascal GPUs
+			if (strstr( d, "1010" ) || strstr( d, "1030" ) || strstr( d, "1050" ) || strstr( d, "1060" ) || strstr( d, "1070" ) || strstr( d, "1080" )) isPascal = true;
+		}
+		else if (strstr( d, "quadro" ))
+		{
+			// detect Pascal GPUs
+			if (strstr( d, "p2000" ) || strstr( d, "p1000" ) || strstr( d, "p600" ) || strstr( d, "p400" ) || strstr( d, "p5000" ) || strstr( d, "p100" )) isPascal = true;
+		}
+		else
+		{
+			// detect Pascal GPUs
+			if (strstr( d, "titan x" )) isPascal = true;
+		}
+	}
+	else if (strstr( d, "amd" ))
+	{
+		isAMD = true;
+	}
+	else if (strstr( d, "intel" ))
+	{
+		isIntel = true;
+	}
+	else
+	{
+		isOther = true;
+	}
+	// report on findings
+	printf( "hardware detected: " );
+	if (isNVidia)
+	{
+		printf( "NVIDIA, " );
+		if (isAmpere) printf( "AMPERE class.\n" );
+		else if (isTuring) printf( "TURING class.\n" );
+		else if (isPascal) printf( "PASCAL class.\n" );
+		else printf( "PRE-PASCAL hardware (warning: slow).\n" );
+	}
+	else if (isAMD)
+	{
+		printf( "AMD.\n" );
+	}
+	else if (isIntel)
+	{
+		printf( "Intel.\n" );
+	}
+	else
+	{
+		printf( "identification failed.\n" );
+	}
 	// create a command-queue
 	queue = clCreateCommandQueue( context, devices[deviceUsed], CL_QUEUE_PROFILING_ENABLE, &error );
 	if (!CHECKCL( error )) return false;
@@ -1171,13 +1413,14 @@ void Kernel::KillCL()
 
 // SetArgument methods
 // ----------------------------------------------------------------------------
-void Kernel::SetArgument( int idx, cl_mem* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, Buffer* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer->GetDevicePtr() ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, int value ) { clSetKernelArg( kernel, idx, sizeof( int ), &value ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, float value ) { clSetKernelArg( kernel, idx, sizeof( float ), &value ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, float2 value ) { clSetKernelArg( kernel, idx, sizeof( float2 ), &value ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, float3 value ) { clSetKernelArg( kernel, idx, sizeof( float3 ), &value ); arg0set |= idx == 0; }
-void Kernel::SetArgument( int idx, float4 value ) { clSetKernelArg( kernel, idx, sizeof( float4 ), &value ); arg0set |= idx == 0; }
+void Kernel::SetArgument( int idx, cl_mem* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, Buffer* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer->GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, Buffer& buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer.GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, int value ) { clSetKernelArg( kernel, idx, sizeof( int ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float value ) { clSetKernelArg( kernel, idx, sizeof( float ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float2 value ) { clSetKernelArg( kernel, idx, sizeof( float2 ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float3 value ) { clSetKernelArg( kernel, idx, sizeof( float3 ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float4 value ) { clSetKernelArg( kernel, idx, sizeof( float4 ), &value ); arg0set |= idx == 0; argIdx = idx; }
 
 // Run method
 // ----------------------------------------------------------------------------
@@ -1189,7 +1432,7 @@ void Kernel::Run( cl_event* eventToWaitFor, cl_event* eventToSet )
 	clFinish( queue );
 }
 
-void Kernel::Run( cl_mem* buffers, int count, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
+void Kernel::Run( cl_mem* buffers, const int count, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
 {
 	cl_int error;
 	if (Kernel::candoInterop)
@@ -1218,7 +1461,24 @@ void Kernel::Run( Buffer* buffer, const int2 tileSize, cl_event* eventToWaitFor,
 	}
 	else
 	{
-		CHECKCL( error = clEnqueueNDRangeKernel( queue, kernel, 2, 0, workSize, localSize, 0, eventToWaitFor, eventToSet ) );
+		CHECKCL( error = clEnqueueNDRangeKernel( queue, kernel, 2, 0, workSize, localSize, eventToWaitFor ? 1 : 0, eventToWaitFor, eventToSet ) );
+	}
+}
+
+void Kernel::Run( Buffer* buffer, const int count, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
+{
+	// execute a 1D kernel that outputs to a screen buffer
+	cl_int error;
+	size_t workSize = (size_t)count;
+	if (Kernel::candoInterop)
+	{
+		CHECKCL( error = clEnqueueAcquireGLObjects( queue, 1, buffer->GetDevicePtr(), 0, 0, acq ) );
+		CHECKCL( error = clEnqueueNDRangeKernel( queue, kernel, 1, 0, &workSize, 0, eventToWaitFor ? 1 : 0, eventToWaitFor, eventToSet ) );
+		CHECKCL( error = clEnqueueReleaseGLObjects( queue, 1, buffer->GetDevicePtr(), 0, 0, rel ) );
+	}
+	else
+	{
+		CHECKCL( error = clEnqueueNDRangeKernel( queue, kernel, 1, 0, &workSize, 0, eventToWaitFor ? 1 : 0, eventToWaitFor, eventToSet ) );
 	}
 }
 
@@ -1243,12 +1503,13 @@ static char s_Font[51][5][6];
 static bool fontInitialized = false;
 static int s_Transl[256];
 
-Surface::Surface( int w, int h, uint* b ) : buffer( b ), width( w ), height( h ) {}
+Surface::Surface( int w, int h, uint* b ) : pixels( b ), width( w ), height( h ) {}
 Surface::Surface( int w, int h ) : width( w ), height( h )
 {
-	buffer = (uint*)MALLOC64( w * h * sizeof( uint ) );
+	pixels = (uint*)MALLOC64( w * h * sizeof( uint ) );
+	ownBuffer = true; // needs to be deleted in destructor
 }
-Surface::Surface( const char* file ) : buffer( 0 ), width( 0 ), height( 0 )
+Surface::Surface( const char* file ) : pixels( 0 ), width( 0 ), height( 0 )
 {
 	FILE* f = fopen( file, "rb" );
 	if (!f) FatalError( "File not found: %s", file );
@@ -1262,19 +1523,20 @@ void Surface::LoadImage( const char* file )
 	unsigned char* data = stbi_load( file, &width, &height, &n, 0 );
 	if (data)
 	{
-		buffer = (uint*)MALLOC64( width * height * sizeof( uint ) );
+		pixels = (uint*)MALLOC64( width * height * sizeof( uint ) );
+		ownBuffer = true; // needs to be deleted in destructor
 		const int s = width * height;
 		if (n == 1) // greyscale
 		{
 			for (int i = 0; i < s; i++)
 			{
 				const unsigned char p = data[i];
-				buffer[i] = p + (p << 8) + (p << 16);
+				pixels[i] = p + (p << 8) + (p << 16);
 			}
 		}
 		else
 		{
-			for (int i = 0; i < s; i++) buffer[i] = (data[i * n + 0] << 16) + (data[i * n + 1] << 8) + data[i * n + 2];
+			for (int i = 0; i < s; i++) pixels[i] = (data[i * n + 0] << 16) + (data[i * n + 1] << 8) + data[i * n + 2];
 		}
 	}
 	stbi_image_free( data );
@@ -1282,19 +1544,19 @@ void Surface::LoadImage( const char* file )
 
 Surface::~Surface()
 {
-	FREE64( buffer ); // let's hope we allocated this
+	if (ownBuffer) FREE64( pixels ); // free only if we allocated the buffer ourselves
 }
 
 void Surface::Clear( uint c )
 {
 	const int s = width * height;
-	for (int i = 0; i < s; i++) buffer[i] = c;
+	for (int i = 0; i < s; i++) pixels[i] = c;
 }
 
 void Surface::Plot( int x, int y, uint c )
 {
 	if (x < 0 || y < 0 || x >= width || y >= height) return;
-	buffer[x + y * width] = c;
+	pixels[x + y * width] = c;
 }
 
 void Surface::Print( const char* s, int x1, int y1, uint c )
@@ -1304,7 +1566,7 @@ void Surface::Print( const char* s, int x1, int y1, uint c )
 		InitCharset();
 		fontInitialized = true;
 	}
-	uint* t = buffer + x1 + y1 * width;
+	uint* t = pixels + x1 + y1 * width;
 	for (int i = 0; i < (int)(strlen( s )); i++, t += 6)
 	{
 		int pos = 0;
@@ -1319,8 +1581,8 @@ void Surface::Print( const char* s, int x1, int y1, uint c )
 
 void Surface::CopyTo( Surface* d, int x, int y )
 {
-	uint* dst = d->buffer;
-	uint* src = buffer;
+	uint* dst = d->pixels;
+	uint* src = pixels;
 	if ((src) && (dst))
 	{
 		int srcwidth = width;

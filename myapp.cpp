@@ -28,4 +28,24 @@ void MyApp::Tick( float deltaTime )
 	}
 	// plot a white pixel in the bottom right corner
 	screen->Plot( SCRWIDTH - 2, SCRHEIGHT - 2, 0xffffff );
+
+#if 1
+
+	static Kernel* kernel = 0;
+	static Surface* bitmap = 0;
+	static Buffer* clBuffer = 0;
+	if (!kernel)
+	{
+		Kernel::InitCL();
+		kernel = new Kernel( "cl/kernels.cl", "render" ),
+			bitmap = new Surface( 512, 512 ),
+			clBuffer = new Buffer( 512 * 512, Buffer::DEFAULT, bitmap->pixels );
+	}
+	kernel->SetArgument( 0, clBuffer );
+	kernel->Run( 512 * 512 );
+	clBuffer->CopyFromDevice();
+	bitmap->CopyTo( screen, 500, 200 );
+
+#endif
+
 }
