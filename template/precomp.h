@@ -1116,6 +1116,7 @@ public:
 	void SetNextArgument( float3 v ) { SetArgument( ++argIdx, v ); }
 	void SetNextArgument( float4 v ) { SetArgument( ++argIdx, v ); }
 	static bool InitCL();
+	static void CheckCLStarted();
 	static void KillCL();
 private:
 	// data members

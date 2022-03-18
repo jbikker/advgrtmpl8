@@ -1074,6 +1074,7 @@ void Buffer::Clear()
 // ----------------------------------------------------------------------------
 Kernel::Kernel( char* file, char* entryPoint )
 {
+	CheckCLStarted();
 	// load a cl file
 	string csText = TextFileRead( file );
 	if (csText.size() == 0) FatalError( "File %s not found", file );
@@ -1228,6 +1229,7 @@ Kernel::Kernel( char* file, char* entryPoint )
 
 Kernel::Kernel( cl_program& existingProgram, char* entryPoint )
 {
+	CheckCLStarted();
 	cl_int error;
 	program = existingProgram;
 	kernel = clCreateKernel( program, entryPoint, &error );
@@ -1281,32 +1283,32 @@ bool Kernel::InitCL()
 			{
 				size_t o = 0, s = deviceList.find( ' ', o );
 				bool hasFeature = false;
-			while (s != deviceList.npos)
-			{
-				string subs = deviceList.substr( o, s - o );
+				while (s != deviceList.npos)
+				{
+					string subs = deviceList.substr( o, s - o );
 					if (strcmp( mustHave[j].c_str(), subs.c_str() ) == 0) hasFeature = true;
 					do { o = s + 1, s = deviceList.find( ' ', o ); } while (s == o);
 				}
 				if (!hasFeature) hasAll = false;
 			}
 			if (hasAll)
+			{
+				cl_context_properties props[] =
 				{
-					cl_context_properties props[] =
-					{
-						CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetWGLContext( window ),
-						CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
-						CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0
-					};
-					// attempt to create a context with the requested features
-					context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
-					if (error == CL_SUCCESS)
-					{
-						candoInterop = true;
-						deviceUsed = i;
-						break;
-					}
+					CL_GL_CONTEXT_KHR, (cl_context_properties)glfwGetWGLContext( window ),
+					CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
+					CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0
+				};
+				// attempt to create a context with the requested features
+				context = clCreateContext( props, 1, &devices[i], NULL, NULL, &error );
+				if (error == CL_SUCCESS)
+				{
+					candoInterop = true;
+					deviceUsed = i;
+					break;
 				}
-				if (deviceUsed > -1) break;
+			}
+			if (deviceUsed > -1) break;
 		}
 	}
 	if (deviceUsed == -1) FatalError( "No capable OpenCL device found." );
@@ -1411,21 +1413,29 @@ void Kernel::KillCL()
 	clReleaseContext( context );
 }
 
+// CheckCLStarted method
+// ----------------------------------------------------------------------------
+void Kernel::CheckCLStarted()
+{
+	if (!clStarted) FatalError( "Call InitCL() before using OpenCL functionality." );
+}
+
 // SetArgument methods
 // ----------------------------------------------------------------------------
-void Kernel::SetArgument( int idx, cl_mem* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, Buffer* buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer->GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, Buffer& buffer ) { clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer.GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, int value ) { clSetKernelArg( kernel, idx, sizeof( int ), &value ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, float value ) { clSetKernelArg( kernel, idx, sizeof( float ), &value ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, float2 value ) { clSetKernelArg( kernel, idx, sizeof( float2 ), &value ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, float3 value ) { clSetKernelArg( kernel, idx, sizeof( float3 ), &value ); arg0set |= idx == 0; argIdx = idx; }
-void Kernel::SetArgument( int idx, float4 value ) { clSetKernelArg( kernel, idx, sizeof( float4 ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, cl_mem* buffer ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, Buffer* buffer ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer->GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, Buffer& buffer ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( cl_mem ), buffer.GetDevicePtr() ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, int value ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( int ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float value ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( float ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float2 value ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( float2 ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float3 value ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( float3 ), &value ); arg0set |= idx == 0; argIdx = idx; }
+void Kernel::SetArgument( int idx, float4 value ) { CheckCLStarted(); clSetKernelArg( kernel, idx, sizeof( float4 ), &value ); arg0set |= idx == 0; argIdx = idx; }
 
 // Run method
 // ----------------------------------------------------------------------------
 void Kernel::Run( cl_event* eventToWaitFor, cl_event* eventToSet )
 {
+	CheckCLStarted();
 	glFinish();
 	cl_int error = clEnqueueNDRangeKernel( queue, kernel, 2, 0, workSize, localSize, eventToWaitFor ? 1 : 0, eventToWaitFor, eventToSet );
 	CHECKCL( error );
@@ -1434,6 +1444,7 @@ void Kernel::Run( cl_event* eventToWaitFor, cl_event* eventToSet )
 
 void Kernel::Run( cl_mem* buffers, const int count, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
 {
+	CheckCLStarted();
 	cl_int error;
 	if (Kernel::candoInterop)
 	{
@@ -1450,6 +1461,7 @@ void Kernel::Run( cl_mem* buffers, const int count, cl_event* eventToWaitFor, cl
 void Kernel::Run( Buffer* buffer, const int2 tileSize, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
 {
 	// execute a kernel for each pixel of a screen buffer, 1 thread per pixel
+	CheckCLStarted();
 	cl_int error;
 	if (!arg0set) FatalError( "Kernel expects at least 1 argument, none set." );
 	if (Kernel::candoInterop)
@@ -1468,6 +1480,7 @@ void Kernel::Run( Buffer* buffer, const int2 tileSize, cl_event* eventToWaitFor,
 void Kernel::Run( Buffer* buffer, const int count, cl_event* eventToWaitFor, cl_event* eventToSet, cl_event* acq, cl_event* rel )
 {
 	// execute a 1D kernel that outputs to a screen buffer
+	CheckCLStarted();
 	cl_int error;
 	size_t workSize = (size_t)count;
 	if (Kernel::candoInterop)
@@ -1484,6 +1497,7 @@ void Kernel::Run( Buffer* buffer, const int count, cl_event* eventToWaitFor, cl_
 
 void Kernel::Run2D( const int2 count, const int2 lsize, cl_event* eventToWaitFor, cl_event* eventToSet )
 {
+	CheckCLStarted();
 	size_t localSize[2] = { (size_t)lsize.x, (size_t)lsize.y };
 	size_t workSize[2] = { (size_t)count.x, (size_t)count.y };
 	cl_int error;
@@ -1492,6 +1506,7 @@ void Kernel::Run2D( const int2 count, const int2 lsize, cl_event* eventToWaitFor
 
 void Kernel::Run( const size_t count, const size_t localSize, cl_event* eventToWaitFor, cl_event* eventToSet )
 {
+	CheckCLStarted();
 	cl_int error;
 	CHECKCL( error = clEnqueueNDRangeKernel( queue, kernel, 1, 0, &count, localSize == 0 ? 0 : &localSize, eventToWaitFor ? 1 : 0, eventToWaitFor, eventToSet ) );
 }
