@@ -122,16 +122,86 @@ using namespace Tmpl8;
 #endif
 
 // vector type placeholders, carefully matching OpenCL's layout and alignment
-struct ALIGN( 8 ) int2 { int2() = default; int2( int a, int b ) : x( a ), y( b ) {} int x, y; };
-struct ALIGN( 8 ) uint2 { uint2() = default; uint2( int a, int b ) : x( a ), y( b ) {} uint x, y; };
-struct ALIGN( 8 ) float2 { float2() = default; float2( float a, float b ) : x( a ), y( b ) {} float x, y; };
-struct ALIGN( 16 ) int3 { int3() = default; int3( int a, int b, int c ) : x( a ), y( b ), z( c ) {} int x, y, z; int dummy; };
-struct ALIGN( 16 ) uint3 { uint3() = default; uint3( uint a, uint b, uint c ) : x( a ), y( b ), z( c ) {} uint x, y, z; uint dummy; };
-struct ALIGN( 16 ) float3 { float3() = default; float3( float a, float b, float c ) : x( a ), y( b ), z( c ) {} float x, y, z; float dummy; };
-struct ALIGN( 16 ) int4 { int x, y, z, w; };
-struct ALIGN( 16 ) uint4 { uint x, y, z, w; };
-struct ALIGN( 16 ) float4 { float x, y, z, w; };
-struct ALIGN( 4 ) uchar4 { uchar x, y, z, w; };
+struct ALIGN( 8 ) int2 
+{ 
+	int2() = default; 
+	int2( const int a, const int b ) : x( a ), y( b ) {} 
+	int2( const int a ) : x( a ), y( a ) {}
+	union { struct { int x, y; }; int cell[2]; };
+	int operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 8 ) uint2 
+{ 
+	uint2() = default; 
+	uint2( const int a, const int b ) : x( a ), y( b ) {} 
+	uint2( const uint a ) : x( a ), y( a ) {}
+	union { struct { uint x, y; }; uint cell[2]; };
+	uint operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 8 ) float2 
+{ 
+	float2() = default; 
+	float2( const float a, const float b ) : x( a ), y( b ) {} 
+	float2( const float a ) : x(a ), y(a ) {}
+	union { struct { float x, y; }; float cell[2]; };
+	float operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) int3 
+{ 
+	int3() = default; 
+	int3( const int a, const int b, const int c ) : x( a ), y( b ), z( c ) {} 
+	int3( const int a ) : x( a ), y( a ), z( a ) {}
+	union { struct { int x, y, z; int dummy; }; int cell[4]; };
+	int operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) uint3 
+{ 
+	uint3() = default; 
+	uint3( const uint a, const uint b, const uint c ) : x( a ), y( b ), z( c ) {} 
+	uint3( const uint a ) : x( a ), y( a ), z( a ) {}
+	union { struct { uint x, y, z; uint dummy; }; uint cell[4]; };
+	uint operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) float3
+{
+	float3() = default;
+	float3( const float a, const float b, const float c ) : x( a ), y( b ), z( c ) {}
+	float3( const float a ) : x( a ), y( a ), z( a ) {}
+	union { struct { float x, y, z; float dummy; }; float cell[4]; };
+	float operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) int4
+{
+	int4() = default;
+	int4( const int a, const int b, const int c, const int d ) : x( a ), y( b ), z( c ), w( d ) {}
+	int4( const int a ) : x( a ), y( a ), z( a ), w( a ) {}
+	union { struct { int x, y, z, w; }; int cell[4]; };
+	int operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) uint4 
+{ 
+	uint4() = default;
+	uint4( const uint a, const uint b, const uint c, const uint d ) : x( a ), y( b ), z( c ), w( d ) {}
+	uint4( const uint a ) : x( a ), y( a ), z( a ), w( a ) {}
+	union { struct { uint x, y, z, w; }; uint cell[4]; };
+	uint operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 16 ) float4 
+{ 
+	float4() = default;
+	float4( const float a, const float b, const float c, const float d ) : x( a ), y( b ), z( c ), w( d) {}
+	float4( const float a ) : x( a ), y( a ), z( a ), w( a ) {}
+	union { struct { float x, y, z, w; }; float cell[4]; };
+	float operator [] ( const int n ) const { return cell[n]; }
+};
+struct ALIGN( 4 ) uchar4 
+{ 
+	uchar4() = default;
+	uchar4( const uchar a, const uchar b, const uchar c, const uchar d ) : x( a ), y( b ), z( c ), w( d ) {}
+	uchar4( const uchar a ) : x( a ), y( a ), z( a ), w( a ) {}
+	union { struct { uchar x, y, z, w; }; uchar cell[4]; };
+	uchar operator [] ( const int n ) const { return cell[n]; }
+};
 
 // fatal error reporting (with a pretty window)
 #define FATALERROR( fmt, ... ) FatalError( "Error on line %d of %s: " fmt "\n", __LINE__, __FILE__, ##__VA_ARGS__ )
@@ -1129,7 +1199,7 @@ public:
 	void SetFirstArgument( cl_mem* buffer ) { argIdx = 0; SetArgument( 0, buffer ); }
 	void SetFirstArgument( Buffer* buffer ) { argIdx = 0; SetArgument( 0, buffer ); }
 	void SetFirstArgument( float v ) { argIdx = 0; SetArgument( 0, v ); }
-	void SetFirstArgument( int v ) { argIdx = 0; SetArgument( 0, v ); } 
+	void SetFirstArgument( int v ) { argIdx = 0; SetArgument( 0, v ); }
 	void SetFirstArgument( float2 v ) { argIdx = 0; SetArgument( 0, v ); }
 	void SetFirstArgument( float3 v ) { argIdx = 0; SetArgument( 0, v ); }
 	void SetFirstArgument( float4 v ) { argIdx = 0; SetArgument( 0, v ); }

@@ -1598,6 +1598,44 @@ void Surface::Print( const char* s, int x1, int y1, uint c )
 	}
 }
 
+#define OUTCODE(x,y) (((x)<xmin)?1:(((x)>xmax)?2:0))+(((y)<ymin)?4:(((y)>ymax)?8:0))
+
+void Surface::Line( float x1, float y1, float x2, float y2, uint c )
+{
+	// clip (Cohen-Sutherland, https://en.wikipedia.org/wiki/Cohen%E2%80%93Sutherland_algorithm)
+	const float xmin = 0, ymin = 0, xmax = (float)width - 1, ymax = (float)height - 1;
+	int c0 = OUTCODE( x1, y1 ), c1 = OUTCODE( x2, y2 );
+	bool accept = false;
+	while (1)
+	{
+		if (!(c0 | c1)) { accept = true; break; }
+		else if (c0 & c1) break; else
+		{
+			float x, y;
+			const int co = c0 ? c0 : c1;
+			if (co & 8) x = x1 + (x2 - x1) * (ymax - y1) / (y2 - y1), y = ymax;
+			else if (co & 4) x = x1 + (x2 - x1) * (ymin - y1) / (y2 - y1), y = ymin;
+			else if (co & 2) y = y1 + (y2 - y1) * (xmax - x1) / (x2 - x1), x = xmax;
+			else if (co & 1) y = y1 + (y2 - y1) * (xmin - x1) / (x2 - x1), x = xmin;
+			if (co == c0) x1 = x, y1 = y, c0 = OUTCODE( x1, y1 );
+			else x2 = x, y2 = y, c1 = OUTCODE( x2, y2 );
+		}
+	}
+	if (!accept) return;
+	float b = x2 - x1;
+	float h = y2 - y1;
+	float l = fabsf( b );
+	if (fabsf( h ) > l) l = fabsf( h );
+	int il = (int)l;
+	float dx = b / (float)l;
+	float dy = h / (float)l;
+	for (int i = 0; i <= il; i++)
+	{
+		*(pixels + (int)x1 + (int)y1 * width) = c;
+		x1 += dx, y1 += dy;
+	}
+}
+
 void Surface::CopyTo( Surface* d, int x, int y )
 {
 	uint* dst = d->pixels;
