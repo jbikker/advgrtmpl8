@@ -16,6 +16,10 @@ void MyApp::Init()
 // -----------------------------------------------------------
 void MyApp::Tick( float deltaTime )
 {
+
+	// NOTE: clear this function before actual use; code is only for 
+	// demonstration purposes. See _ getting started.pdf for details.
+	
 	// clear the screen to black
 	screen->Clear( 0 );
 	// print something to the console window
@@ -29,7 +33,7 @@ void MyApp::Tick( float deltaTime )
 	// plot a white pixel in the bottom right corner
 	screen->Plot( SCRWIDTH - 2, SCRHEIGHT - 2, 0xffffff );
 
-#if 1
+#if 0
 
 	static Kernel* kernel = 0;			// statics should be members of MyApp of course.
 	static Surface bitmap( 512, 512 );	// having them here allows us to disable the OpenCL

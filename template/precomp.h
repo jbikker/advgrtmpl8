@@ -76,6 +76,7 @@ class Surface
 	enum { OWNER = 1 };
 public:
 	// constructor / destructor
+	Surface() = default;
 	Surface( int w, int h, uint* buffer );
 	Surface( int w, int h );
 	Surface( const char* file );
@@ -252,6 +253,24 @@ protected:
 	JobThread* m_JobThreadList;
 };
 
+// pixel operations
+inline uint ScaleColor( const uint c, const uint scale )
+{
+	const uint rb = (((c & 0xff00ff) * scale) >> 8) & 0x00ff00ff;
+	const uint ag = (((c & 0xff00ff00) >> 8) * scale) & 0xff00ff00;
+	return rb + ag;
+}
+inline uint AddBlend( const uint c1, const uint c2 )
+{
+	const uint r1 = (c1 >> 16) & 255, r2 = (c2 >> 16) & 255;
+	const uint g1 = (c1 >> 8) & 255, g2 = (c2 >> 8) & 255;
+	const uint b1 = c1 & 255, b2 = c2 & 255;
+	const uint r = min( 255u, r1 + r2 );
+	const uint g = min( 255u, g1 + g2 );
+	const uint b = min( 255u, b1 + b2 );
+	return (r << 16) + (g << 8) + b;
+}
+
 // random numbers
 uint RandomUInt();
 uint RandomUInt( uint& seed );
@@ -276,6 +295,7 @@ inline float fminf( float a, float b ) { return a < b ? a : b; }
 inline float fmaxf( float a, float b ) { return a > b ? a : b; }
 inline float rsqrtf( float x ) { return 1.0f / sqrtf( x ); }
 inline float sqrf( float x ) { return x * x; }
+inline int sqr( int x ) { return x * x; }
 
 inline float2 make_float2( const float a, float b ) { float2 f2; f2.x = a, f2.y = b; return f2; }
 inline float2 make_float2( const float s ) { return make_float2( s, s ); }
@@ -613,6 +633,10 @@ inline int dot( const int4& a, const int4& b ) { return a.x * b.x + a.y * b.y + 
 inline uint dot( const uint2& a, const uint2& b ) { return a.x * b.x + a.y * b.y; }
 inline uint dot( const uint3& a, const uint3& b ) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 inline uint dot( const uint4& a, const uint4& b ) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
+
+inline float sqrLength( const float2& v ) { return dot( v, v ); }
+inline float sqrLength( const float3& v ) { return dot( v, v ); }
+inline float sqrLength( const float4& v ) { return dot( v, v ); }
 
 inline float length( const float2& v ) { return sqrtf( dot( v, v ) ); }
 inline float length( const float3& v ) { return sqrtf( dot( v, v ) ); }
@@ -1266,6 +1290,7 @@ public:
 	virtual void MouseUp( int button ) = 0;
 	virtual void MouseDown( int button ) = 0;
 	virtual void MouseMove( int x, int y ) = 0;
+	virtual void MouseWheel( float y ) = 0;
 	virtual void KeyUp( int key ) = 0;
 	virtual void KeyDown( int key ) = 0;
 	Surface* screen = 0;

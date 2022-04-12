@@ -64,6 +64,10 @@ void MouseButtonCallback( GLFWwindow* window, int button, int action, int mods )
 	if (action == GLFW_PRESS) { if (app) app->MouseDown( button ); }
 	else if (action == GLFW_RELEASE) { if (app) app->MouseUp( button ); }
 }
+void MouseScrollCallback( GLFWwindow* window, double x, double y )
+{
+	app->MouseWheel( (float)y );
+}
 void MousePosCallback( GLFWwindow* window, double x, double y )
 {
 	if (app) app->MouseMove( (int)x, (int)y );
@@ -84,13 +88,19 @@ void main()
 	glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 	glfwWindowHint( GLFW_STENCIL_BITS, GL_FALSE );
 	glfwWindowHint( GLFW_RESIZABLE, GL_FALSE /* easier :) */ );
-	if (!(window = glfwCreateWindow( SCRWIDTH, SCRHEIGHT, "Tmpl8-2022", 0, 0 ))) FatalError( "glfwCreateWindow failed." );
+#ifdef FULLSCREEN
+	window = glfwCreateWindow( SCRWIDTH, SCRHEIGHT, "Tmpl8-2022", glfwGetPrimaryMonitor(), 0 );
+#else
+	window = glfwCreateWindow( SCRWIDTH, SCRHEIGHT, "Tmpl8-2022", 0, 0 );
+#endif
+	if (!window) FatalError( "glfwCreateWindow failed." );
 	glfwMakeContextCurrent( window );
 	// register callbacks
 	glfwSetWindowSizeCallback( window, ReshapeWindowCallback );
 	glfwSetKeyCallback( window, KeyEventCallback );
 	glfwSetWindowFocusCallback( window, WindowFocusCallback );
 	glfwSetMouseButtonCallback( window, MouseButtonCallback );
+	glfwSetScrollCallback( window, MouseScrollCallback );
 	glfwSetCursorPosCallback( window, MousePosCallback );
 	glfwSetCharCallback( window, CharEventCallback );
 	// initialize GLAD
@@ -102,7 +112,7 @@ void main()
 	glDisable( GL_BLEND );
 	CheckGL();
 	// we want a console window for text output
-#ifdef _MSC_VER
+#ifndef FULLSCREEN
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
 	AllocConsole();
 	GetConsoleScreenBufferInfo( GetStdHandle( STD_OUTPUT_HANDLE ), &coninfo );
@@ -126,7 +136,7 @@ void main()
 	// basic shader: apply gamma correction
 	Shader* shader = new Shader(
 		"#version 330\nin vec4 p;\nin vec2 t;out vec2 u;void main(){u=t;gl_Position=p;}",
-		"#version 330\nuniform sampler2D c;in vec2 u;out vec4 f;void main(){f=sqrt(texture(c,u));}", true );
+		"#version 330\nuniform sampler2D c;in vec2 u;out vec4 f;void main(){f=/*sqrt*/(texture(c,u));}", true );
 #else
 	// fxaa shader
 	Shader* shader = new Shader(
